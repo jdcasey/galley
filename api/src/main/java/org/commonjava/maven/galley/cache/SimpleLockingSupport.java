@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 @ApplicationScoped
 public class SimpleLockingSupport
+        implements LockingSupport
 {
 
     private final Logger logger = LoggerFactory.getLogger( getClass() );
@@ -135,6 +136,55 @@ public class SimpleLockingSupport
         }
     }
 
+    @Override
+    public void waitForReadUnlock( ConcreteResource resource )
+    {
+        waitForUnlock( resource );
+    }
+
+    @Override
+    public void waitForWriteUnlock( ConcreteResource resource )
+    {
+        waitForUnlock( resource );
+    }
+
+    @Override
+    public boolean isReadLocked( ConcreteResource resource )
+    {
+        return isLocked( resource );
+    }
+
+    @Override
+    public boolean isWriteLocked( ConcreteResource resource )
+    {
+        return isLocked( resource );
+    }
+
+    @Override
+    public void unlockRead( ConcreteResource resource )
+    {
+        unlock( resource );
+    }
+
+    @Override
+    public void unlockWrite( ConcreteResource resource )
+    {
+        unlock( resource );
+    }
+
+    @Override
+    public void lockRead( ConcreteResource resource )
+    {
+        lock( resource );
+    }
+
+    @Override
+    public void lockWrite( ConcreteResource resource )
+    {
+        lock( resource );
+    }
+
+    @Override
     public synchronized void cleanupCurrentThread()
     {
         final long id = Thread.currentThread()

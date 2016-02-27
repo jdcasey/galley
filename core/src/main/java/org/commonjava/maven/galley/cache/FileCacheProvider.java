@@ -17,6 +17,7 @@ package org.commonjava.maven.galley.cache;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,13 +28,14 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
+import javax.annotation.PostConstruct;
 import javax.enterprise.inject.Alternative;
 import javax.inject.Inject;
 import javax.inject.Named;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.output.TeeOutputStream;
 import org.commonjava.maven.galley.model.ConcreteResource;
 import org.commonjava.maven.galley.model.Location;
 import org.commonjava.maven.galley.model.Transfer;
@@ -54,8 +56,6 @@ public class FileCacheProvider
 
     private final Logger logger = LoggerFactory.getLogger( getClass() );
 
-    private final Map<ConcreteResource, Transfer> transferCache = new ConcurrentHashMap<ConcreteResource, Transfer>( 10000 );
-
     @Inject
     private FileCacheProviderConfig config;
 
@@ -67,6 +67,8 @@ public class FileCacheProvider
 
     @Inject
     private TransferDecorator transferDecorator;
+
+    private ResourceFileCacheHelper helper;
 
     private final SimpleLockingSupport lockingSupport = new SimpleLockingSupport();
 
@@ -81,6 +83,7 @@ public class FileCacheProvider
         this.fileEventManager = fileEventManager;
         this.transferDecorator = transferDecorator;
         this.config = new FileCacheProviderConfig( cacheBasedir ).withAliasLinking( aliasLinking );
+        start();
     }
 
     public FileCacheProvider( final FileCacheProviderConfig config, final PathGenerator pathGenerator, final FileEventManager fileEventManager,
@@ -90,6 +93,7 @@ public class FileCacheProvider
         this.pathGenerator = pathGenerator;
         this.fileEventManager = fileEventManager;
         this.transferDecorator = transferDecorator;
+        start();
     }
 
     public FileCacheProvider( final File cacheBasedir, final PathGenerator pathGenerator, final FileEventManager fileEventManager,
@@ -98,313 +102,206 @@ public class FileCacheProvider
         this( cacheBasedir, pathGenerator, fileEventManager, transferDecorator, true );
     }
 
-    @Override
-    public File getDetachedFile( final ConcreteResource resource )
+    @PostConstruct
+    public void start()
     {
-        // TODO: this might be a bit heavy-handed, but we need to be sure. 
-        // Maybe I can improve it later.
-        final Transfer txfr = getTransfer( resource );
-        synchronized ( txfr )
-        {
-            File f = getRawFile( resource );
-            if ( resource.isRoot() && !f.isDirectory() )
-            {
-                f.mkdirs();
-            }
-
-            // TODO: configurable default timeout
-            final int timeoutSeconds = resource.getLocation()
-                        .getAttribute( Location.CACHE_TIMEOUT_SECONDS, Integer.class,
-                                       Location.DEFAULT_CACHE_TIMEOUT_SECONDS );
-
-            if ( !resource.isRoot() && f.exists() && !f.isDirectory() && timeoutSeconds > 0 )
-            {
-                final long current = System.currentTimeMillis();
-                final long lastModified = f.lastModified();
-                final int tos =
-                    timeoutSeconds < Location.MIN_CACHE_TIMEOUT_SECONDS ? Location.MIN_CACHE_TIMEOUT_SECONDS
-                                    : timeoutSeconds;
-
-                final long timeout = TimeUnit.MILLISECONDS.convert( tos, TimeUnit.SECONDS );
-
-                if ( current - lastModified > timeout )
-                {
-                    final File mved = new File( f.getPath() + SUFFIX_TO_DELETE );
-                    f.renameTo( mved );
-
-                    try
-                    {
-                        logger.info( "Deleting cached file: {} (moved to: {})\n  due to timeout after: {}\n  elapsed: {}\n  original timeout in seconds: {}",
-                                     f, mved, timeout, ( current - lastModified ), tos );
-
-                        if ( mved.exists() )
-                        {
-                            FileUtils.forceDelete( mved );
-                        }
-                    }
-                    catch ( final IOException e )
-                    {
-                        logger.error( String.format( "Failed to delete: %s.", f ), e );
-                    }
-                }
-            }
-
-            return f;
-        }
+        this.helper = new ResourceFileCacheHelper( fileEventManager, transferDecorator, pathGenerator, lockingSupport, config.getCacheBasedir(), this );
     }
 
-    private File getRawFile( ConcreteResource resource )
+    @Override
+    public File getDetachedFile( ConcreteResource resource )
     {
-        final String altDir = resource.getLocation()
-                                      .getAttribute( Location.ATTR_ALT_STORAGE_LOCATION, String.class );
-
-        File f = null;
-        if ( altDir == null )
-        {
-            f = new File( getFilePath( resource ) );
-        }
-        else
-        {
-            f = new File( altDir, resource.getPath() );
-        }
-
-        return f;
+        return helper.getDetachedFile( resource );
     }
 
     @Override
     public boolean isDirectory( final ConcreteResource resource )
     {
-        final File f = getDetachedFile( resource );
-        return f.isDirectory();
+        return helper.isDirectory( resource );
     }
 
     @Override
     public boolean isFile( final ConcreteResource resource )
     {
-        final File f = getDetachedFile( resource );
-        return f.isFile();
+        return helper.isFile( resource );
     }
 
     @Override
     public InputStream openInputStream( final ConcreteResource resource )
         throws IOException
     {
-        return new FileInputStream( getDetachedFile( resource ) );
+        File fast = helper.getFastStorageFile( resource );
+        File main = helper.getMainStorageFile( resource );
+        if ( fast != null )
+        {
+            if ( !fast.exists() )
+            {
+                FileUtils.copyFile( main, fast );
+            }
+
+            return new FileInputStream( fast );
+        }
+
+        return new FileInputStream( main );
     }
 
     @Override
     public OutputStream openOutputStream( final ConcreteResource resource )
         throws IOException
     {
-        final File targetFile = getDetachedFile( resource );
+        File fast = helper.getFastStorageFile( resource );
+        File main = helper.getMainStorageFile( resource );
 
-        final File dir = targetFile.getParentFile();
-        if ( !dir.isDirectory() && !dir.mkdirs() )
+        helper.mkdirs(main);
+        if ( fast != null )
         {
-            throw new IOException( "Cannot create directory: " + dir );
+            helper.mkdirs(fast);
+            return new TeeOutputStream( helper.wrapperOutputStream( main ), helper.wrapperOutputStream( fast ) );
         }
 
-        final File downloadFile = new File( targetFile.getPath() + CacheProvider.SUFFIX_TO_WRITE );
-        final FileOutputStream stream = new FileOutputStream( downloadFile );
-
-        return new AtomicFileOutputStreamWrapper( targetFile, downloadFile, stream );
+        return helper.wrapperOutputStream( main );
     }
 
     @Override
     public boolean exists( final ConcreteResource resource )
     {
-        final File f = getRawFile( resource );
-        //        logger.info( "Checking for existence of cache file: {}", f );
-        return f.exists();
+        return helper.exists( resource );
     }
 
     @Override
     public void copy( final ConcreteResource from, final ConcreteResource to )
         throws IOException
     {
-        FileUtils.copyFile( getDetachedFile( from ), getDetachedFile( to ) );
+        helper.copy( from, to );
     }
 
     @Override
     public boolean delete( final ConcreteResource resource )
         throws IOException
     {
-        return getDetachedFile( resource ).delete();
+        return helper.delete( resource );
     }
 
     @Override
     public String[] list( final ConcreteResource resource )
     {
-        final String[] listing = getDetachedFile( resource ).list();
-        if ( listing == null )
-        {
-            return null;
-        }
-
-        final List<String> list = new ArrayList<String>( Arrays.asList( listing ) );
-        for ( final Iterator<String> it = list.iterator(); it.hasNext(); )
-        {
-            final String fname = it.next();
-            if ( fname.charAt( 0 ) == '.' )
-            {
-                it.remove();
-                continue;
-            }
-
-            for ( final String suffix : HIDDEN_SUFFIXES )
-            {
-                if ( fname.endsWith( suffix ) )
-                {
-                    it.remove();
-                }
-            }
-        }
-
-        return list.toArray( new String[list.size()] );
+        return helper.list( resource );
     }
 
     @Override
     public void mkdirs( final ConcreteResource resource )
         throws IOException
     {
-        getDetachedFile( resource ).mkdirs();
+        helper.mkdirs( resource );
     }
 
     @Override
     public void createFile( final ConcreteResource resource )
         throws IOException
     {
-        getDetachedFile( resource ).createNewFile();
+        helper.createFile( resource );
     }
 
     @Override
     public void createAlias( final ConcreteResource from, final ConcreteResource to )
         throws IOException
     {
-        // if the download landed in a different repository, copy it to the current one for
-        // completeness...
-        final Location fromKey = from.getLocation();
-        final Location toKey = to.getLocation();
-        final String fromPath = from.getPath();
-        final String toPath = to.getPath();
-
-        if ( fromKey != null && toKey != null && !fromKey.equals( toKey ) && fromPath != null && toPath != null && !fromPath.equals( toPath ) )
-        {
-            if ( config.isAliasLinking() )
-            {
-                final File fromFile = getDetachedFile( from );
-                final File toFile = getDetachedFile( to );
-
-                FileUtils.copyFile( fromFile, toFile );
-                //                Files.createLink( Paths.get( fromFile.toURI() ), Paths.get( toFile.toURI() ) );
-            }
-            else
-            {
-                copy( from, to );
-            }
-        }
+        helper.createAlias( from, to, config.isAliasLinking() );
     }
 
     @Override
     public String getFilePath( final ConcreteResource resource )
     {
-        return PathUtils.normalize( config.getCacheBasedir().getPath(), pathGenerator.getFilePath( resource ) );
+        return helper.getFilePath( resource );
     }
 
     @Override
     public synchronized Transfer getTransfer( final ConcreteResource resource )
     {
-        Transfer t = transferCache.get( resource );
-        if ( t == null )
-        {
-            t = new Transfer( resource, this, fileEventManager, transferDecorator );
-            transferCache.put( resource, t );
-        }
-
-        return t;
+        return helper.getTransfer( resource );
     }
 
     @Override
     public void clearTransferCache()
     {
-        transferCache.clear();
+        helper.clearTransferCache();
     }
 
     @Override
     public long length( final ConcreteResource resource )
     {
-        return getDetachedFile( resource ).length();
+        return helper.length( resource );
     }
 
     @Override
     public long lastModified( final ConcreteResource resource )
     {
-        return getDetachedFile( resource ).lastModified();
+        return helper.lastModified( resource );
     }
 
     @Override
-    public boolean isReadLocked( final ConcreteResource resource )
+    public boolean isReadLocked( ConcreteResource resource )
     {
-        return lockingSupport.isLocked( resource );
+        return helper.isReadLocked( resource );
     }
 
     @Override
-    public boolean isWriteLocked( final ConcreteResource resource )
+    public boolean isWriteLocked( ConcreteResource resource )
     {
-        return lockingSupport.isLocked( resource );
+        return helper.isWriteLocked( resource );
     }
 
     @Override
-    public void unlockRead( final ConcreteResource resource )
+    public void unlockRead( ConcreteResource resource )
     {
-        lockingSupport.unlock( resource );
+        helper.unlockRead( resource );
     }
 
     @Override
-    public void unlockWrite( final ConcreteResource resource )
+    public void unlockWrite( ConcreteResource resource )
     {
-        lockingSupport.unlock( resource );
+        helper.unlockWrite( resource );
     }
 
     @Override
-    public void lockRead( final ConcreteResource resource )
+    public void lockRead( ConcreteResource resource )
     {
-        lockingSupport.lock( resource );
+        helper.lockRead( resource );
     }
 
     @Override
-    public void lockWrite( final ConcreteResource resource )
+    public void lockWrite( ConcreteResource resource )
     {
-        lockingSupport.lock( resource );
+        helper.lockWrite( resource );
     }
 
     @Override
-    public void waitForWriteUnlock( final ConcreteResource resource )
+    public void waitForWriteUnlock( ConcreteResource resource )
     {
-        lockingSupport.waitForUnlock( resource );
+        helper.waitForWriteUnlock( resource );
     }
 
     @Override
-    public void waitForReadUnlock( final ConcreteResource resource )
+    public void waitForReadUnlock( ConcreteResource resource )
     {
-        lockingSupport.waitForUnlock( resource );
+        helper.waitForReadUnlock( resource );
     }
 
     @Override
     public void cleanupCurrentThread()
     {
-        lockingSupport.cleanupCurrentThread();
+        helper.cleanupCurrentThread();
     }
 
     @Override
     public void startReporting()
     {
-        lockingSupport.startReporting();
+        helper.startReporting();
     }
 
     @Override
     public void stopReporting()
     {
-        lockingSupport.stopReporting();
+        helper.stopReporting();
     }
 }

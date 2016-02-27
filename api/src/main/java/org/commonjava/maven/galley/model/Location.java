@@ -26,6 +26,8 @@ public interface Location
 
     String ATTR_ALT_STORAGE_LOCATION = "alt-storage-location";
 
+    String ATTR_FAST_STORAGE_LOCATION = "alt-cache-storage-location";
+
     String MAX_CONNECTIONS = "max-connections";
 
     int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 30;

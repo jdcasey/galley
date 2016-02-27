@@ -49,4 +49,24 @@ public final class LocationUtils
     {
         return location.getAttribute( Location.MAX_CONNECTIONS, Integer.class, Location.DEFAULT_MAX_CONNECTIONS );
     }
+
+    public static String getAltStoragePath( Location location )
+    {
+        return location == null ? null : location.getAttribute( Location.ATTR_ALT_STORAGE_LOCATION, String.class );
+    }
+
+    public static String getAltStoragePath( ConcreteResource resource )
+    {
+        return resource == null ? null : getAltStoragePath( resource.getLocation() );
+    }
+
+    public static String getFastStoragePath( Location location )
+    {
+        return location == null ? null : location.getAttribute( Location.ATTR_FAST_STORAGE_LOCATION, String.class );
+    }
+
+    public static String getFastStoragePath( ConcreteResource resource )
+    {
+        return resource == null ? null : getFastStoragePath( resource.getLocation() );
+    }
 }

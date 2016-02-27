@@ -15,27 +15,10 @@
  */
 package org.commonjava.maven.galley.cache.partyline;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
-import javax.enterprise.inject.Alternative;
-import javax.inject.Inject;
-import javax.inject.Named;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.commonjava.maven.galley.cache.LockingSupport;
+import org.commonjava.maven.galley.cache.ResourceFileCacheHelper;
 import org.commonjava.maven.galley.model.ConcreteResource;
 import org.commonjava.maven.galley.model.Location;
 import org.commonjava.maven.galley.model.Transfer;
@@ -48,16 +31,29 @@ import org.commonjava.util.partyline.JoinableFileManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import javax.enterprise.inject.Alternative;
+import javax.inject.Inject;
+import javax.inject.Named;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 @Named( "partyline-galley-cache" )
 @Alternative
 public class PartyLineCacheProvider
-    implements CacheProvider
+        implements CacheProvider
 {
 
     private final Logger logger = LoggerFactory.getLogger( getClass() );
-
-    private final Map<ConcreteResource, Transfer> transferCache =
-        new ConcurrentHashMap<ConcreteResource, Transfer>( 10000 );
 
     private final JoinableFileManager fileManager = new JoinableFileManager();
 
@@ -73,6 +69,8 @@ public class PartyLineCacheProvider
     @Inject
     private TransferDecorator transferDecorator;
 
+    private ResourceFileCacheHelper helper;
+
     protected PartyLineCacheProvider()
     {
     }
@@ -85,11 +83,11 @@ public class PartyLineCacheProvider
         this.pathGenerator = pathGenerator;
         this.fileEventManager = fileEventManager;
         this.transferDecorator = transferDecorator;
-        this.config =
-            new PartyLineCacheProviderConfig( cacheBasedir ).withAliasLinkingEnabled( aliasLinking )
-                                                            .withTimeoutProcessingEnabled( timeoutProcessing )
-                                                            .withDefaultTimeoutSeconds( defaultTimeoutSeconds );
-        startReportingDaemon();
+        this.config = new PartyLineCacheProviderConfig( cacheBasedir ).withAliasLinkingEnabled( aliasLinking )
+                                                                      .withTimeoutProcessingEnabled( timeoutProcessing )
+                                                                      .withDefaultTimeoutSeconds(
+                                                                              defaultTimeoutSeconds );
+        start();
     }
 
     public PartyLineCacheProvider( final PartyLineCacheProviderConfig config, final PathGenerator pathGenerator,
@@ -99,7 +97,7 @@ public class PartyLineCacheProvider
         this.pathGenerator = pathGenerator;
         this.fileEventManager = fileEventManager;
         this.transferDecorator = transferDecorator;
-        startReportingDaemon();
+        start();
     }
 
     public PartyLineCacheProvider( final File cacheBasedir, final PathGenerator pathGenerator,
@@ -109,13 +107,20 @@ public class PartyLineCacheProvider
         this.fileEventManager = fileEventManager;
         this.transferDecorator = transferDecorator;
         this.config = new PartyLineCacheProviderConfig( cacheBasedir );
-        startReportingDaemon();
+        start();
     }
 
     @PostConstruct
-    public void startReportingDaemon()
+    public void start()
     {
         fileManager.startReporting();
+        PartyLineLockingSupport lockingSupport = new PartyLineLockingSupport( fileManager );
+
+        helper = new ResourceFileCacheHelper( fileEventManager, transferDecorator, pathGenerator,
+                                              lockingSupport, config.getCacheBasedir(),
+                                              this );
+
+        lockingSupport.start( helper );
     }
 
     @PreDestroy
@@ -132,8 +137,8 @@ public class PartyLineCacheProvider
         final Transfer txfr = getTransfer( resource );
         synchronized ( txfr )
         {
-            final String altDir = resource.getLocation()
-                                          .getAttribute( Location.ATTR_ALT_STORAGE_LOCATION, String.class );
+            final String altDir =
+                    resource.getLocation().getAttribute( Location.ATTR_ALT_STORAGE_LOCATION, String.class );
 
             File f;
             if ( altDir == null )
@@ -151,18 +156,18 @@ public class PartyLineCacheProvider
             }
 
             // TODO: configurable default timeout
-            final int timeoutSeconds =
-                resource.getLocation()
-                        .getAttribute( Location.CACHE_TIMEOUT_SECONDS, Integer.class, config.getDefaultTimeoutSeconds() );
+            final int timeoutSeconds = resource.getLocation()
+                                               .getAttribute( Location.CACHE_TIMEOUT_SECONDS, Integer.class,
+                                                              config.getDefaultTimeoutSeconds() );
 
             if ( !resource.isRoot() && f.exists() && !f.isDirectory() && config.isTimeoutProcessingEnabled()
-                && timeoutSeconds > 0 )
+                    && timeoutSeconds > 0 )
             {
                 final long current = System.currentTimeMillis();
                 final long lastModified = f.lastModified();
-                final int tos =
-                    timeoutSeconds < Location.MIN_CACHE_TIMEOUT_SECONDS ? Location.MIN_CACHE_TIMEOUT_SECONDS
-                                    : timeoutSeconds;
+                final int tos = timeoutSeconds < Location.MIN_CACHE_TIMEOUT_SECONDS ?
+                        Location.MIN_CACHE_TIMEOUT_SECONDS :
+                        timeoutSeconds;
 
                 final long timeout = TimeUnit.MILLISECONDS.convert( tos, TimeUnit.SECONDS );
 
@@ -173,9 +178,10 @@ public class PartyLineCacheProvider
 
                     try
                     {
-                        logger.info( "Deleting cached file: {} (moved to: {})\nTimeout: {}ms\nElapsed: {}ms\nCurrently: {}\nLast Modified: {}\nOriginal Timeout was: {}s",
-                                     f, mved, timeout, ( current - lastModified ), new Date( current ),
-                                     new Date( lastModified ), tos );
+                        logger.info(
+                                "Deleting cached file: {} (moved to: {})\nTimeout: {}ms\nElapsed: {}ms\nCurrently: {}\nLast Modified: {}\nOriginal Timeout was: {}s",
+                                f, mved, timeout, ( current - lastModified ), new Date( current ),
+                                new Date( lastModified ), tos );
 
                         if ( mved.exists() )
                         {
@@ -209,14 +215,14 @@ public class PartyLineCacheProvider
 
     @Override
     public InputStream openInputStream( final ConcreteResource resource )
-        throws IOException
+            throws IOException
     {
         return fileManager.openInputStream( getDetachedFile( resource ) );
     }
 
     @Override
     public OutputStream openOutputStream( final ConcreteResource resource )
-        throws IOException
+            throws IOException
     {
         final File targetFile = getDetachedFile( resource );
 
@@ -259,13 +265,13 @@ public class PartyLineCacheProvider
 
     @Override
     public void copy( final ConcreteResource from, final ConcreteResource to )
-        throws IOException
+            throws IOException
     {
         copy( getDetachedFile( from ), getDetachedFile( to ) );
     }
 
     private void copy( final File from, final File to )
-        throws IOException
+            throws IOException
     {
         InputStream in = null;
         OutputStream out = null;
@@ -284,7 +290,7 @@ public class PartyLineCacheProvider
 
     @Override
     public boolean delete( final ConcreteResource resource )
-        throws IOException
+            throws IOException
     {
         return getDetachedFile( resource ).delete();
     }
@@ -322,21 +328,21 @@ public class PartyLineCacheProvider
 
     @Override
     public void mkdirs( final ConcreteResource resource )
-        throws IOException
+            throws IOException
     {
         getDetachedFile( resource ).mkdirs();
     }
 
     @Override
     public void createFile( final ConcreteResource resource )
-        throws IOException
+            throws IOException
     {
         getDetachedFile( resource ).createNewFile();
     }
 
     @Override
     public void createAlias( final ConcreteResource from, final ConcreteResource to )
-        throws IOException
+            throws IOException
     {
         // if the download landed in a different repository, copy it to the current one for
         // completeness...
@@ -346,7 +352,7 @@ public class PartyLineCacheProvider
         final String toPath = to.getPath();
 
         if ( fromKey != null && toKey != null && !fromKey.equals( toKey ) && fromPath != null && toPath != null
-            && !fromPath.equals( toPath ) )
+                && !fromPath.equals( toPath ) )
         {
             copy( from, to );
         }
@@ -361,97 +367,90 @@ public class PartyLineCacheProvider
     @Override
     public synchronized Transfer getTransfer( final ConcreteResource resource )
     {
-        Transfer t = transferCache.get( resource );
-        if ( t == null )
-        {
-            t = new Transfer( resource, this, fileEventManager, transferDecorator );
-            transferCache.put( resource, t );
-        }
-
-        return t;
+        return helper.getTransfer( resource );
     }
 
     @Override
     public void clearTransferCache()
     {
-        transferCache.clear();
+        helper.clearTransferCache();
     }
 
     @Override
     public long length( final ConcreteResource resource )
     {
-        return getDetachedFile( resource ).length();
+        return helper.length(resource);
     }
 
     @Override
     public long lastModified( final ConcreteResource resource )
     {
-        return getDetachedFile( resource ).lastModified();
+        return helper.lastModified(resource);
     }
 
     @Override
-    public boolean isReadLocked( final ConcreteResource resource )
+    public boolean isReadLocked( ConcreteResource resource )
     {
-        return fileManager.isReadLocked( getDetachedFile( resource ) );
+        return helper.isReadLocked( resource );
     }
 
     @Override
-    public boolean isWriteLocked( final ConcreteResource resource )
+    public boolean isWriteLocked( ConcreteResource resource )
     {
-        return fileManager.isWriteLocked( getDetachedFile( resource ) );
+        return helper.isWriteLocked( resource );
     }
 
     @Override
-    public void unlockRead( final ConcreteResource resource )
+    public void unlockRead( ConcreteResource resource )
     {
-        //        fileManager.unlock( getDetachedFile( resource ) );
+        helper.unlockRead( resource );
     }
 
     @Override
-    public void unlockWrite( final ConcreteResource resource )
+    public void unlockWrite( ConcreteResource resource )
     {
-        //        fileManager.unlock( getDetachedFile( resource ) );
+        helper.unlockWrite( resource );
     }
 
     @Override
-    public void lockRead( final ConcreteResource resource )
+    public void lockRead( ConcreteResource resource )
     {
-        //        fileManager.lock( getDetachedFile( resource ) );
+        helper.lockRead( resource );
     }
 
     @Override
-    public void lockWrite( final ConcreteResource resource )
+    public void lockWrite( ConcreteResource resource )
     {
-        //        fileManager.lock( getDetachedFile( resource ) );
+        helper.lockWrite( resource );
     }
 
     @Override
-    public void waitForWriteUnlock( final ConcreteResource resource )
+    public void waitForWriteUnlock( ConcreteResource resource )
     {
-        fileManager.waitForWriteUnlock( getDetachedFile( resource ) );
+        helper.waitForWriteUnlock( resource );
     }
 
     @Override
-    public void waitForReadUnlock( final ConcreteResource resource )
+    public void waitForReadUnlock( ConcreteResource resource )
     {
-        fileManager.waitForReadUnlock( getDetachedFile( resource ) );
+        helper.waitForReadUnlock( resource );
     }
 
     @Override
     public void cleanupCurrentThread()
     {
-        fileManager.cleanupCurrentThread();
+        helper.cleanupCurrentThread();
     }
 
     @Override
     public void startReporting()
     {
-        fileManager.startReporting();
+        helper.startReporting();
     }
 
     @Override
     public void stopReporting()
     {
-        fileManager.stopReporting();
+        helper.stopReporting();
     }
 }
