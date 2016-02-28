@@ -29,6 +29,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Created by jdcasey on 2/27/16.
+ *
+ * Helper class that consolidates common file operations for file-based CacheProvider implementations. This class is
+ * fast-storage aware, and will try to return results from that faster storage location before the main (slower) storage.
  */
 public class ResourceFileCacheHelper
 {
@@ -133,6 +136,19 @@ public class ResourceFileCacheHelper
         if ( f == null )
         {
             f = getMainStorageFile( resource );
+        }
+
+        return f;
+    }
+
+    public File getFastStorageFileTemp( ConcreteResource resource )
+    {
+        final String fastDir = LocationUtils.getFastStoragePath( resource.getLocation() );
+
+        File f = null;
+        if ( fastDir != null )
+        {
+            f = new File( fastDir, resource.getPath() + CacheProvider.SUFFIX_TO_WRITE );
         }
 
         return f;
@@ -455,4 +471,5 @@ public class ResourceFileCacheHelper
     {
         lockingSupport.stopReporting();
     }
+
 }

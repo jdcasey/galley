@@ -51,24 +51,13 @@ import org.slf4j.LoggerFactory;
 @Named( "file-galley-cache" )
 @Alternative
 public class FileCacheProvider
-    implements CacheProvider
+        extends AbstractFileBasedCacheProvider
 {
 
     private final Logger logger = LoggerFactory.getLogger( getClass() );
 
     @Inject
     private FileCacheProviderConfig config;
-
-    @Inject
-    private PathGenerator pathGenerator;
-
-    @Inject
-    private FileEventManager fileEventManager;
-
-    @Inject
-    private TransferDecorator transferDecorator;
-
-    private ResourceFileCacheHelper helper;
 
     private final SimpleLockingSupport lockingSupport = new SimpleLockingSupport();
 
@@ -79,9 +68,7 @@ public class FileCacheProvider
     public FileCacheProvider( final File cacheBasedir, final PathGenerator pathGenerator, final FileEventManager fileEventManager,
                               final TransferDecorator transferDecorator, final boolean aliasLinking )
     {
-        this.pathGenerator = pathGenerator;
-        this.fileEventManager = fileEventManager;
-        this.transferDecorator = transferDecorator;
+        super( pathGenerator, fileEventManager, transferDecorator );
         this.config = new FileCacheProviderConfig( cacheBasedir ).withAliasLinking( aliasLinking );
         start();
     }
@@ -89,10 +76,8 @@ public class FileCacheProvider
     public FileCacheProvider( final FileCacheProviderConfig config, final PathGenerator pathGenerator, final FileEventManager fileEventManager,
                               final TransferDecorator transferDecorator )
     {
+        super( pathGenerator, fileEventManager, transferDecorator );
         this.config = config;
-        this.pathGenerator = pathGenerator;
-        this.fileEventManager = fileEventManager;
-        this.transferDecorator = transferDecorator;
         start();
     }
 
@@ -102,36 +87,12 @@ public class FileCacheProvider
         this( cacheBasedir, pathGenerator, fileEventManager, transferDecorator, true );
     }
 
-    @PostConstruct
-    public void start()
-    {
-        this.helper = new ResourceFileCacheHelper( fileEventManager, transferDecorator, pathGenerator, lockingSupport, config.getCacheBasedir(), this );
-    }
-
-    @Override
-    public File getDetachedFile( ConcreteResource resource )
-    {
-        return helper.getDetachedFile( resource );
-    }
-
-    @Override
-    public boolean isDirectory( final ConcreteResource resource )
-    {
-        return helper.isDirectory( resource );
-    }
-
-    @Override
-    public boolean isFile( final ConcreteResource resource )
-    {
-        return helper.isFile( resource );
-    }
-
     @Override
     public InputStream openInputStream( final ConcreteResource resource )
         throws IOException
     {
-        File fast = helper.getFastStorageFile( resource );
-        File main = helper.getMainStorageFile( resource );
+        File fast = getHelper().getFastStorageFile( resource );
+        File main = getHelper().getMainStorageFile( resource );
         if ( fast != null )
         {
             if ( !fast.exists() )
@@ -149,159 +110,30 @@ public class FileCacheProvider
     public OutputStream openOutputStream( final ConcreteResource resource )
         throws IOException
     {
-        File fast = helper.getFastStorageFile( resource );
-        File main = helper.getMainStorageFile( resource );
+        File fast = getHelper().getFastStorageFile( resource );
+        File main = getHelper().getMainStorageFile( resource );
 
-        helper.mkdirs(main);
+        getHelper().mkdirs(main);
         if ( fast != null )
         {
-            helper.mkdirs(fast);
-            return new TeeOutputStream( helper.wrapperOutputStream( main ), helper.wrapperOutputStream( fast ) );
+            getHelper().mkdirs(fast);
+            return new TeeOutputStream( getHelper().wrapperOutputStream( main ), getHelper().wrapperOutputStream( fast ) );
         }
 
-        return helper.wrapperOutputStream( main );
+        return getHelper().wrapperOutputStream( main );
     }
 
     @Override
-    public boolean exists( final ConcreteResource resource )
+    protected boolean isAliasLinkingEnabled()
     {
-        return helper.exists( resource );
+        return false;
     }
 
     @Override
-    public void copy( final ConcreteResource from, final ConcreteResource to )
-        throws IOException
+    protected ResourceFileCacheHelper createFileCacheHelper( FileEventManager fileEventManager,
+                                                             TransferDecorator transferDecorator,
+                                                             PathGenerator pathGenerator )
     {
-        helper.copy( from, to );
-    }
-
-    @Override
-    public boolean delete( final ConcreteResource resource )
-        throws IOException
-    {
-        return helper.delete( resource );
-    }
-
-    @Override
-    public String[] list( final ConcreteResource resource )
-    {
-        return helper.list( resource );
-    }
-
-    @Override
-    public void mkdirs( final ConcreteResource resource )
-        throws IOException
-    {
-        helper.mkdirs( resource );
-    }
-
-    @Override
-    public void createFile( final ConcreteResource resource )
-        throws IOException
-    {
-        helper.createFile( resource );
-    }
-
-    @Override
-    public void createAlias( final ConcreteResource from, final ConcreteResource to )
-        throws IOException
-    {
-        helper.createAlias( from, to, config.isAliasLinking() );
-    }
-
-    @Override
-    public String getFilePath( final ConcreteResource resource )
-    {
-        return helper.getFilePath( resource );
-    }
-
-    @Override
-    public synchronized Transfer getTransfer( final ConcreteResource resource )
-    {
-        return helper.getTransfer( resource );
-    }
-
-    @Override
-    public void clearTransferCache()
-    {
-        helper.clearTransferCache();
-    }
-
-    @Override
-    public long length( final ConcreteResource resource )
-    {
-        return helper.length( resource );
-    }
-
-    @Override
-    public long lastModified( final ConcreteResource resource )
-    {
-        return helper.lastModified( resource );
-    }
-
-    @Override
-    public boolean isReadLocked( ConcreteResource resource )
-    {
-        return helper.isReadLocked( resource );
-    }
-
-    @Override
-    public boolean isWriteLocked( ConcreteResource resource )
-    {
-        return helper.isWriteLocked( resource );
-    }
-
-    @Override
-    public void unlockRead( ConcreteResource resource )
-    {
-        helper.unlockRead( resource );
-    }
-
-    @Override
-    public void unlockWrite( ConcreteResource resource )
-    {
-        helper.unlockWrite( resource );
-    }
-
-    @Override
-    public void lockRead( ConcreteResource resource )
-    {
-        helper.lockRead( resource );
-    }
-
-    @Override
-    public void lockWrite( ConcreteResource resource )
-    {
-        helper.lockWrite( resource );
-    }
-
-    @Override
-    public void waitForWriteUnlock( ConcreteResource resource )
-    {
-        helper.waitForWriteUnlock( resource );
-    }
-
-    @Override
-    public void waitForReadUnlock( ConcreteResource resource )
-    {
-        helper.waitForReadUnlock( resource );
-    }
-
-    @Override
-    public void cleanupCurrentThread()
-    {
-        helper.cleanupCurrentThread();
-    }
-
-    @Override
-    public void startReporting()
-    {
-        helper.startReporting();
-    }
-
-    @Override
-    public void stopReporting()
-    {
-        helper.stopReporting();
+        return new ResourceFileCacheHelper( fileEventManager, transferDecorator, pathGenerator, lockingSupport, config.getCacheBasedir(), this );
     }
 }

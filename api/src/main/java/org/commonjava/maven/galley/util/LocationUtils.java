@@ -22,6 +22,8 @@ import org.commonjava.maven.galley.model.Location;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.commons.lang.StringUtils.isNotEmpty;
+
 public final class LocationUtils
 {
 
@@ -60,6 +62,13 @@ public final class LocationUtils
         return resource == null ? null : getAltStoragePath( resource.getLocation() );
     }
 
+    public static void setAltStoragePath( String storage, Location location )
+    {
+        if ( isNotEmpty( storage ) )
+        {
+            location.setAttribute( Location.ATTR_ALT_STORAGE_LOCATION, storage );
+        }
+    }
     public static String getFastStoragePath( Location location )
     {
         return location == null ? null : location.getAttribute( Location.ATTR_FAST_STORAGE_LOCATION, String.class );
@@ -68,5 +77,13 @@ public final class LocationUtils
     public static String getFastStoragePath( ConcreteResource resource )
     {
         return resource == null ? null : getFastStoragePath( resource.getLocation() );
+    }
+
+    public static void setFastStoragePath( String storage, Location location )
+    {
+        if ( isNotEmpty( storage ) )
+        {
+            location.setAttribute( Location.ATTR_FAST_STORAGE_LOCATION, storage );
+        }
     }
 }

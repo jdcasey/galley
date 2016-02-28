@@ -27,6 +27,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 
+import java.util.concurrent.Executors;
+
 public class PartyLineCacheProviderTest
     extends CacheProviderTCK
 {
@@ -44,7 +46,8 @@ public class PartyLineCacheProviderTest
         final FileEventManager events = new TestFileEventManager();
         final TransferDecorator decorator = new TestTransferDecorator();
 
-        provider = new PartyLineCacheProvider( temp.newFolder(), pathgen, events, decorator );
+        provider = new PartyLineCacheProvider( temp.newFolder(), pathgen, events, decorator,
+                                               Executors.newCachedThreadPool() );
     }
 
     @Override
