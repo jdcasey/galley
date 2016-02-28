@@ -68,8 +68,6 @@ public class PartyLineCacheProvider
     @ExecutorConfig( named="fast-storage-transfer", threads=2, daemon=false, priority=4 )
     private ExecutorService fastStorageTransfers;
 
-    private ResourceFileCacheHelper helper;
-
     protected PartyLineCacheProvider()
     {
     }
@@ -110,13 +108,13 @@ public class PartyLineCacheProvider
     public InputStream openInputStream( final ConcreteResource resource )
             throws IOException
     {
-        File main = helper.getMainStorageFile( resource );
+        File main = getHelper().getMainStorageFile( resource );
         if ( !main.exists() )
         {
             throw new IOException( "No such file: " + main );
         }
 
-        File fast = helper.getFastStorageFile( resource );
+        File fast = getHelper().getFastStorageFile( resource );
         if ( fast != null )
         {
             if ( fast.exists() )
@@ -157,7 +155,7 @@ public class PartyLineCacheProvider
                 new ResourceFileCacheHelper( fileEventManager, transferDecorator, pathGenerator, lockingSupport,
                                              config.getCacheBasedir(), this );
 
-        lockingSupport.start( this.helper );
+        lockingSupport.start( helper );
         return helper;
     }
 }
