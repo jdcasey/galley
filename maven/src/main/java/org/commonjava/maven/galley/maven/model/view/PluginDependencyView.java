@@ -19,14 +19,15 @@ import org.commonjava.maven.atlas.ident.DependencyScope;
 import org.w3c.dom.Element;
 
 public class PluginDependencyView
-    extends DependencyView
+        extends DependencyView
 {
 
     private final PluginView plugin;
 
-    public PluginDependencyView( final MavenPomView pomView, final PluginView plugin, final Element element, final OriginInfo originInfo )
+    public PluginDependencyView( final MavenPomView pomView, final PluginView plugin, final Element element,
+                                 final OriginInfo originInfo, final String managedPluginXpathFragment )
     {
-        super( pomView, element, originInfo );
+        super( pomView, element, originInfo, managedPluginXpathFragment + "/dependencies/dependency" );
         this.plugin = plugin;
     }
 
@@ -40,5 +41,4 @@ public class PluginDependencyView
     {
         return DependencyScope.toolchain;
     }
-
 }

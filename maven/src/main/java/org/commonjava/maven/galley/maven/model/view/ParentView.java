@@ -15,6 +15,8 @@
  */
 package org.commonjava.maven.galley.maven.model.view;
 
+import org.commonjava.maven.atlas.ident.ref.ProjectRef;
+import org.commonjava.maven.atlas.ident.ref.ProjectVersionRef;
 import org.commonjava.maven.galley.maven.GalleyMavenException;
 import org.w3c.dom.Element;
 
@@ -38,5 +40,4 @@ public class ParentView
 
         return val;
     }
-
 }

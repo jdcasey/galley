@@ -15,6 +15,19 @@
  */
 package org.commonjava.maven.galley.maven.model.view;
 
+import org.commonjava.maven.atlas.ident.ref.ProjectRef;
+import org.commonjava.maven.atlas.ident.ref.ProjectVersionRef;
+import org.commonjava.maven.galley.maven.GalleyMavenException;
+import org.commonjava.maven.galley.maven.spi.defaults.MavenPluginDefaults;
+import org.commonjava.maven.galley.maven.spi.defaults.MavenPluginImplications;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.w3c.dom.Element;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
 import static org.commonjava.maven.galley.maven.model.view.XPathManager.A;
 import static org.commonjava.maven.galley.maven.model.view.XPathManager.AND;
 import static org.commonjava.maven.galley.maven.model.view.XPathManager.END_PAREN;
@@ -24,23 +37,20 @@ import static org.commonjava.maven.galley.maven.model.view.XPathManager.QUOTE;
 import static org.commonjava.maven.galley.maven.model.view.XPathManager.RESOLVE;
 import static org.commonjava.maven.galley.maven.model.view.XPathManager.TEXT;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
-import org.commonjava.maven.galley.maven.GalleyMavenException;
-import org.commonjava.maven.galley.maven.spi.defaults.MavenPluginDefaults;
-import org.commonjava.maven.galley.maven.spi.defaults.MavenPluginImplications;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-
+/**
+ * View class representing a plugin declaration. This declaration can be in a pluginManagement section, or in the main
+ * plugins section, and it could be within a profile's build section. It extends {@link AbstractPluginBaseView} in order
+ * to provide common views shared with {@link PluginExecutionView} the opportunity to store the parent view in a
+ * constrained type (not {@link Object}). GAV access is provided by delegating to {@link MavenGAVHelper}.
+ */
 public class PluginView
-    extends MavenGAVView
+        extends AbstractPluginBaseView<PluginView>
+        implements ProjectVersionRefView
 {
 
     private final Logger logger = LoggerFactory.getLogger( getClass() );
+
+    private MavenGAVHelper helper;
 
     private final MavenPluginDefaults pluginDefaults;
 
@@ -48,22 +58,21 @@ public class PluginView
 
     private final MavenPluginImplications pluginImplications;
 
-    protected PluginView( final MavenPomView pomView, final Element element, final OriginInfo originInfo, final MavenPluginDefaults pluginDefaults,
-                          final MavenPluginImplications pluginImplications )
+    private String managedPluginXpathFragment;
+
+    private List<PluginExecutionView> executions;
+
+    protected PluginView( final MavenPomView pomView, final Element element, final OriginInfo originInfo,
+                          final MavenPluginDefaults pluginDefaults, final MavenPluginImplications pluginImplications )
     {
         super( pomView, element, originInfo, "build/pluginManagement/plugins/plugin" );
+        this.helper = new MavenGAVHelper( this );
         this.pluginDefaults = pluginDefaults;
         this.pluginImplications = pluginImplications;
     }
 
-    public boolean isManaged()
-        throws GalleyMavenException
-    {
-        return xmlView.resolveXPathToNodeFrom( elementContext, "ancestor::pluginManagement", true ) != null;
-    }
-
     public synchronized List<PluginDependencyView> getLocalPluginDependencies()
-        throws GalleyMavenException
+            throws GalleyMavenException
     {
         if ( pluginDependencies == null )
         {
@@ -75,7 +84,8 @@ public class PluginView
                 for ( final XmlNodeInfo node : nodes )
                 {
                     logger.debug( "Adding plugin dependency for: {}", node.getNode().getNodeName() );
-                    result.add( new PluginDependencyView( xmlView, this, (Element) node.getNode(), node.getOriginInfo() ) );
+                    result.add( new PluginDependencyView( getPomView(), this, (Element) node.getNode(), node.getOriginInfo(),
+                                                          getManagedPluginXpathFragment() ) );
                 }
 
                 this.pluginDependencies = result;
@@ -85,34 +95,105 @@ public class PluginView
         return pluginDependencies;
     }
 
+    /**
+     * Retrieve the execution sections defined for this plugin. This will NOT return the implied executions sections
+     * used by plugins bound to the lifecycle by default, or executed directly from the Maven command line.
+     */
+    public synchronized List<PluginExecutionView> getExecutions()
+            throws GalleyMavenException
+    {
+        if ( executions == null )
+        {
+            final List<PluginExecutionView> result = new ArrayList<>();
+
+            // Retrieve the execution sections relative to the current <plugin/> element.
+            // FIXME: This should pull ALL exeuctions from ancestry AND management, and de-duplicate based on id.
+//            List<MavenPomElementView> ancestryElements =
+//                    getAggregationSourceElements( "executions/execution", true, false );
+            final List<XmlNodeInfo> nodes = getFirstNodesWithManagement( "executions/execution" );
+            if ( nodes != null )
+            {
+                for ( final XmlNodeInfo node : nodes )
+                {
+                    logger.debug( "Adding plugin dependency for: {}", node.getNode().getNodeName() );
+                    result.add( new PluginExecutionView( getPomView(), this, (Element) node.getNode(), node.getOriginInfo(),
+                                                          getManagedPluginXpathFragment() ) );
+                }
+
+                this.executions = result;
+            }
+        }
+
+        return executions;
+    }
+
+    public synchronized String getManagedPluginXpathFragment()
+    {
+        if ( managedPluginXpathFragment == null )
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.append( getManagementXpathFragment() )
+              .append( '[' )
+              .append( getManagedViewQualifierFragment() )
+              .append( "]" );
+
+            managedPluginXpathFragment = sb.toString();
+        }
+
+        return managedPluginXpathFragment;
+    }
+
     public Set<PluginDependencyView> getImpliedPluginDependencies()
-        throws GalleyMavenException
+            throws GalleyMavenException
     {
         return pluginImplications.getImpliedPluginDependencies( this );
     }
 
     @Override
     public synchronized String getVersion()
-        throws GalleyMavenException
+            throws GalleyMavenException
     {
-        if ( super.getVersion() == null )
+        String version = helper.getVersion();
+        if ( version == null )
         {
-            setVersion( pluginDefaults.getDefaultVersion( getGroupId(), getArtifactId() ) );
+            version = pluginDefaults.getDefaultVersion( getGroupId(), getArtifactId() );
+            helper.setVersion( version );
         }
 
-        return super.getVersion();
+        return version;
+    }
+
+    @Override
+    public ProjectVersionRef asProjectVersionRef()
+            throws GalleyMavenException
+    {
+        return helper.asProjectVersionRef();
     }
 
     @Override
     public synchronized String getGroupId()
     {
-        final String gid = super.getGroupId();
+        String gid = helper.getGroupId();
         if ( gid == null )
         {
-            setGroupId( pluginDefaults.getDefaultGroupId( getArtifactId() ) );
+            gid = pluginDefaults.getDefaultGroupId( getArtifactId() );
+            helper.setGroupId( gid );
         }
 
-        return super.getGroupId();
+        return gid;
+    }
+
+    @Override
+    public String getArtifactId()
+    {
+        return helper.getArtifactId();
+    }
+
+    @Override
+    public ProjectRef asProjectRef()
+            throws GalleyMavenException
+    {
+        return helper.asProjectRef();
     }
 
     @Override
@@ -145,5 +226,4 @@ public class PluginView
 
         return sb.toString();
     }
-
 }

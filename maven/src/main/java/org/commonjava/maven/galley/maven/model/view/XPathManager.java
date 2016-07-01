@@ -33,6 +33,8 @@ import org.w3c.dom.NodeList;
 public class XPathManager
 {
 
+    public static final String ID = "id";
+
     public static final String G = "groupId";
 
     public static final String A = "artifactId";

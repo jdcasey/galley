@@ -117,7 +117,7 @@ public class MavenPomView
      */
     public Set<String> getProfileIds()
     {
-        return new HashSet<String>( resolveXPathExpressionToAggregatedList( "/profiles/profile/id/text()", false, -1 ) );
+        return new HashSet<String>( resolveXPathExpressionToAggregatedList( "/profiles/profile/id/text()", false, -1, false ) );
     }
 
     public String resolveMavenExpression( final String expression, final String... activeProfileIds )
@@ -151,7 +151,7 @@ public class MavenPomView
 
         if ( value == null )
         {
-            final List<Node> propertyNodes = resolveXPathToAggregatedNodeList( "/project/properties/*", true, -1 );
+            final List<Node> propertyNodes = resolveXPathToAggregatedNodeList( "/project/properties/*", true, -1, false );
             for ( final Node propertyNode : propertyNodes )
             {
                 if ( expression.equals( propertyNode.getNodeName() ) )
@@ -208,11 +208,14 @@ public class MavenPomView
     public String getProfileIdFor( final Element element )
     {
         Node parent = element;
-        do
+        if ( parent != null )
         {
-            parent = parent.getParentNode();
+            do
+            {
+                parent = parent.getParentNode();
+            }
+            while ( parent != null && !"profile".equals( parent.getNodeName() ) );
         }
-        while ( parent != null && !"profile".equals( parent.getNodeName() ) );
 
         if ( parent == null )
         {
@@ -329,23 +332,6 @@ public class MavenPomView
         return depViews;
     }
 
-    // TODO: Do these methods need to be here??
-    /**
-     * RAW ACCESS: Resolve the given XPath expression. If the result is a Node, retrieve the text() child. Resolve any
-     * Maven-style expressions in the result, and pass back the resolved value, or null if nothing is matched.
-     * If more than one node matches, process the first for its string value.
-     *
-     * @param path The XPath expression
-     * @param localOnly If true, only consider values in the local XML document and any available mix-ins (eg.
-     *   BOMs)
-     */
-    public String resolveXPathExpression( final String path, final boolean localOnly )
-        throws GalleyMavenException
-    {
-        final String value = resolveXPathExpression( path, true, localOnly ? 0 : -1 );
-        return value;
-    }
-
     /**
      * RAW ACCESS: Retrieve an {@link Element} instance for the first element matching the given
      * XPath expression and within the other given parameters. If none is found, return null.
@@ -365,37 +351,6 @@ public class MavenPomView
         }
 
         return null;
-    }
-
-    /**
-     * RAW ACCESS: Retrieve an ordered list of {@link MavenPomElementView} instances matching the given
-     * XPath expression and within the other given parameters. The XPath instance compiled from the given
-     * expression will be cached for future use. This method will consider values available in mix-ins (eg.
-     * BOMs).
-     *
-     * @param path The XPath expression to resolve
-     * @param localOnly If true, don't consider values present in ancestry.
-     */
-    public List<MavenPomElementView> resolveXPathToElements( final String path, final boolean localOnly )
-        throws GalleyMavenException
-    {
-        return resolveXPathToAggregatedElementViewList( path, true, localOnly ? 0 : -1 );
-    }
-
-    /**
-     * RAW ACCESS: Retrieve a {@link Node} instance for the first element matching the given
-     * XPath expression and within the other given parameters. If none is found, return null.
-     * The XPath instance compiled from the given expression will be cached for future use. This method will
-     * consider values available in mix-ins (eg. BOMs).
-     *
-     * @param path The XPath expression to resolve
-     * @param localOnly If true, don't consider values present in ancestry.
-     */
-    public synchronized Node resolveXPathToNode( final String path, final boolean localOnly )
-        throws GalleyMavenException
-    {
-        final Node node = resolveXPathToNode( path, true, localOnly ? 0 : -1 );
-        return node;
     }
 
     /**
@@ -518,7 +473,7 @@ public class MavenPomView
     public ParentView getParent()
         throws GalleyMavenException
     {
-        final Element parentEl = (Element) resolveXPathToNode( "/project/parent", true );
+        final Element parentEl = resolveXPathToElement( "/project/parent", true );
 
         if ( parentEl != null )
         {
@@ -781,26 +736,12 @@ public class MavenPomView
     }
 
 
-    public List<PropertiesView> getProperties()
+    public PropertiesView getProperties()
+            throws GalleyMavenException
     {
-        final List<MavenPomElementView> list =
-            resolveXPathToAggregatedElementViewList( "/project//properties", true, -1 );
-        final List<PropertiesView> result = new ArrayList<PropertiesView>( list.size() );
-
-        for ( final MavenPomElementView node : list )
-        {
-            if ( node == null )
-            {
-                continue;
-            }
-
-            result.add (new PropertiesView( node.getPomView(), node.getElement(), node.getOriginInfo() ) );
-        }
-        return result;
+        Element localProps = resolveXPathToElement( "/project/properties", true );
+        return new PropertiesView( this, localProps, new OriginInfo( false ) );
     }
-
-
-
 
     /**
      * RAW ACCESS: Retrieve an ordered list of {@link MavenPomElementView} instances matching the given XPath
@@ -896,39 +837,6 @@ public class MavenPomView
         return result;
     }
 
-    protected String resolveXPathExpressionFrom( final JXPathContext context, final String path )
-    {
-        final String p = trimTextSuffix( path );
-
-        final Node result = resolveXPathToNodeFrom( context, p, true );
-        if ( result != null && result.getNodeType() == Node.TEXT_NODE )
-        {
-            return resolveExpressions( result.getTextContent()
-                                             .trim() );
-        }
-
-        return null;
-    }
-
-    protected List<String> resolveXPathExpressionToListFrom( final JXPathContext context, final String path )
-        throws GalleyMavenException
-    {
-        final String p = trimTextSuffix( path );
-
-        final List<Node> nodes = resolveXPathToNodeListFrom( context, p, true );
-        final List<String> result = new ArrayList<String>( nodes.size() );
-        for ( final Node node : nodes )
-        {
-            if ( node != null && node.getNodeType() == Node.TEXT_NODE )
-            {
-                result.add( resolveExpressions( node.getTextContent()
-                                                    .trim() ) );
-            }
-        }
-
-        return result;
-    }
-
     /**
      * RAW ACCESS: Resolve the given XPath expression. If the result is a Node, retrieve the text() child. Resolve any
      * Maven-style expressions in the result, and pass back the resolved value, or null if nothing is matched.
@@ -966,11 +874,11 @@ public class MavenPomView
      * Maven-style expressions. Return the resulting list of strings.
      */
     public List<String> resolveXPathExpressionToAggregatedList( final String path, final boolean cachePath,
-                                                                final int maxAncestry )
+                                                                final int maxAncestry, final boolean includeMixins )
     {
         final String p = trimTextSuffix( path );
 
-        final List<Node> nodes = resolveXPathToAggregatedNodeList( p, cachePath, maxAncestry );
+        final List<Node> nodes = resolveXPathToAggregatedNodeList( p, cachePath, maxAncestry, includeMixins );
         final List<String> result = new ArrayList<String>( nodes.size() );
         for ( final Node node : nodes )
         {

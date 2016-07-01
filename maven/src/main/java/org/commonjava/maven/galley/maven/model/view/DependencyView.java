@@ -33,6 +33,8 @@ import java.util.Set;
 
 import org.commonjava.maven.atlas.ident.DependencyScope;
 import org.commonjava.maven.atlas.ident.ref.ArtifactRef;
+import org.commonjava.maven.atlas.ident.ref.ProjectRef;
+import org.commonjava.maven.atlas.ident.ref.ProjectVersionRef;
 import org.commonjava.maven.atlas.ident.ref.SimpleArtifactRef;
 import org.commonjava.maven.atlas.ident.ref.SimpleVersionlessArtifactRef;
 import org.commonjava.maven.atlas.ident.ref.VersionlessArtifactRef;
@@ -42,7 +44,8 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 public class DependencyView
-    extends MavenGAVView
+    extends MavenPomElementView
+    implements ProjectVersionRefView
 {
 
     private static final String C = "classifier";
@@ -54,6 +57,8 @@ public class DependencyView
     private static final String OPTIONAL = "optional";
 
     private static final String EXCLUSIONS = "exclusions/exclusion";
+
+    private MavenGAVHelper helper;
 
     private String classifier;
 
@@ -68,6 +73,13 @@ public class DependencyView
     public DependencyView( final MavenPomView pomView, final Element element, final OriginInfo originInfo )
     {
         super( pomView, element, originInfo, "dependencyManagement/dependencies/dependency" );
+        this.helper = new MavenGAVHelper( this );
+    }
+
+    protected DependencyView( final MavenPomView pomView, final Element element, final OriginInfo originInfo, final String managementXpathFragment )
+    {
+        super( pomView, element, originInfo, managementXpathFragment );
+        this.helper = new MavenGAVHelper( this );
     }
 
     public boolean isManaged()
@@ -262,4 +274,36 @@ public class DependencyView
         }
     }
 
+    @Override
+    public String getVersion()
+            throws GalleyMavenException
+    {
+        return helper.getVersion();
+    }
+
+    @Override
+    public ProjectVersionRef asProjectVersionRef()
+            throws GalleyMavenException
+    {
+        return helper.asProjectVersionRef();
+    }
+
+    @Override
+    public String getGroupId()
+    {
+        return helper.getGroupId();
+    }
+
+    @Override
+    public String getArtifactId()
+    {
+        return helper.getArtifactId();
+    }
+
+    @Override
+    public ProjectRef asProjectRef()
+            throws GalleyMavenException
+    {
+        return helper.asProjectRef();
+    }
 }

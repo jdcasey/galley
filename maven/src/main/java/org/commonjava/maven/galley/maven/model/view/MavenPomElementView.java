@@ -20,7 +20,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.commonjava.maven.atlas.ident.ref.ProjectVersionRef;
 import org.commonjava.maven.galley.maven.GalleyMavenException;
+import org.commonjava.maven.galley.maven.parse.ResolveFunctions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
@@ -87,7 +91,6 @@ public class MavenPomElementView
     }
 
     protected String getManagedValue( String named )
-            throws GalleyMavenException
     {
         final MavenPomElementView mgmt = getManagementElement();
         if ( mgmt != null )
@@ -99,7 +102,6 @@ public class MavenPomElementView
     }
 
     protected String getValueWithManagement( final String named )
-            throws GalleyMavenException
     {
         final String value = getValue( named );
         //        logger.info( "Value of path: '{}' local to: {} is: '{}'\nIn: {}", named, element, value, pomView.getRef() );
@@ -111,8 +113,18 @@ public class MavenPomElementView
         return value;
     }
 
+    protected Element getManagedElement( String path )
+    {
+        final MavenPomElementView mgmt = getManagementElement();
+        if ( mgmt != null )
+        {
+            return mgmt.getElement( path );
+        }
+
+        return null;
+    }
+
     private synchronized MavenPomElementView getManagementElement()
-            throws GalleyMavenException
     {
         if ( managementElement == null )
         {
@@ -132,6 +144,91 @@ public class MavenPomElementView
         }
 
         return managementElement;
+    }
+
+    protected synchronized List<MavenPomElementView> getAggregationSourceElements( String path, boolean inherited,
+                                                                                   boolean mixIns )
+            throws GalleyMavenException
+    {
+        List<MavenPomElementView> result = new ArrayList<>();
+
+        initManagementXpaths();
+        if ( inherited )
+        {
+            List<DocRef<ProjectVersionRef>> stack = getPomView().getDocRefStack();
+            int depth = 0;
+            final MavenPomView oldView = ResolveFunctions.getPomView();
+            try
+            {
+                ResolveFunctions.setPomView( getPomView() );
+                for ( final DocRef<ProjectVersionRef> dr : stack )
+                {
+                    if ( depth != 0 )
+                    {
+                        Element n = (Element) dr.getDocContext()
+                                                .selectSingleNode( path );
+
+                        if ( n != null )
+                        {
+                            result.add( new MavenPomElementView( getPomView(), n, new OriginInfo( depth != 0 ) ) );
+                        }
+
+                        if ( managementXpaths != null )
+                        {
+                            for ( final String xpath : managementXpaths )
+                            {
+                                n = (Element) dr.getDocContext()
+                                                .selectSingleNode( xpath );
+
+                                if ( n != null )
+                                {
+                                    result.add( new MavenPomElementView( getPomView(), n, new OriginInfo( depth != 0 ) ) );
+                                }
+
+                            }
+                        }
+                    }
+
+                    depth++;
+                }
+            }
+            finally
+            {
+                ResolveFunctions.setPomView( oldView );
+            }
+        }
+
+        if ( mixIns )
+        {
+            List<MavenXmlMixin<ProjectVersionRef>> mixins = getPomView().getMixins();
+
+            for ( final MavenXmlMixin<ProjectVersionRef> mixin : mixins )
+            {
+                final MavenPomView mixinView = (MavenPomView) mixin.getMixin();
+                if ( mixin.matches( path ) )
+                {
+                    MavenPomElementView e = mixinView.resolveXPathToElementView( path, false, -1 );
+                    if ( e != null )
+                    {
+                        result.add( e );
+                    }
+                }
+
+                for ( final String xpath : managementXpaths )
+                {
+                    if ( mixin.matches( xpath ) )
+                    {
+                        final MavenPomElementView e = mixinView.resolveXPathToElementView( xpath, false, -1 );
+                        if ( e != null )
+                        {
+                            result.add( e );
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     protected List<XmlNodeInfo> getFirstNodesWithManagement( final String path )
@@ -182,14 +279,13 @@ public class MavenPomElementView
     {
         if ( managementXpathFragment == null )
         {
+            Logger logger = LoggerFactory.getLogger( getClass() );
+            logger.debug( "No managementXpathFragment for: {}", getClass().getSimpleName() );
+            managementXpaths = new String[0];
             return;
         }
 
         final String qualifier = getManagedViewQualifierFragment();
-        if ( qualifier == null )
-        {
-            return;
-        }
 
         final List<String> xpaths = new ArrayList<String>();
 
@@ -205,10 +301,12 @@ public class MavenPomElementView
                 sb.append( "/project/profiles/profile[id/text()=\"" )
                   .append( profileId )
                   .append( "\"]/" )
-                  .append( managementXpathFragment )
-                  .append( '[' )
-                  .append( qualifier )
-                  .append( "]" );
+                  .append( managementXpathFragment );
+
+                if ( qualifier != null )
+                {
+                    sb.append( '[' ).append( qualifier ).append( "]" );
+                }
 
                 final String xp = sb.toString();
                 xpaths.add( xp );

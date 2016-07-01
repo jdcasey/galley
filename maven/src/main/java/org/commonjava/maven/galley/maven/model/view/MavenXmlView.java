@@ -275,9 +275,10 @@ public class MavenXmlView<T>
      * @param path The XPath expression
      * @param cachePath If true, compile this XPath expression and cache for future use
      * @param maxDepth Max ancestry depth to search. If < 0, search all ancestors.
+     * @param includeMixins Whether to query mixin POMs for the same hits.
      */
     public synchronized List<Node> resolveXPathToAggregatedNodeList( final String path, final boolean cachePath,
-                                                                     final int maxDepth )
+                                                                     final int maxDepth, final boolean includeMixins )
         throws GalleyMavenRuntimeException
     {
         int maxAncestry = maxDepth;
@@ -311,20 +312,23 @@ public class MavenXmlView<T>
             ancestryDepth++;
         }
 
-        for ( final MavenXmlMixin<T> mixin : mixins )
+        if ( includeMixins )
         {
-            if ( !mixin.matches( path ) )
+            for ( final MavenXmlMixin<T> mixin : mixins )
             {
-                continue;
-            }
-
-            final List<Node> nodes = mixin.getMixin()
-                                          .resolveXPathToAggregatedNodeList( path, cachePath, maxAncestry );
-            if ( nodes != null )
-            {
-                for ( final Node node : nodes )
+                if ( !mixin.matches( path ) )
                 {
-                    result.add( node );
+                    continue;
+                }
+
+                final List<Node> nodes = mixin.getMixin()
+                                              .resolveXPathToAggregatedNodeList( path, cachePath, maxAncestry, includeMixins );
+                if ( nodes != null )
+                {
+                    for ( final Node node : nodes )
+                    {
+                        result.add( node );
+                    }
                 }
             }
         }
@@ -424,9 +428,9 @@ public class MavenXmlView<T>
      * maxAncestry. If maxAncestry < 0, traverse all ancestors.
      */
     public List<String> resolveXPathToAggregatedStringList( final String path, final boolean cachePath,
-                                                            final int maxAncestry )
+                                                            final int maxAncestry, final boolean includeMixins )
     {
-        final List<Node> nodes = resolveXPathToAggregatedNodeList( path, cachePath, maxAncestry );
+        final List<Node> nodes = resolveXPathToAggregatedNodeList( path, cachePath, maxAncestry, includeMixins );
         final List<String> result = new ArrayList<String>( nodes.size() );
         for ( final Node node : nodes )
         {
@@ -533,7 +537,15 @@ public class MavenXmlView<T>
      */
     public String toXML( final Element element )
     {
-        return xml.toXML( element );
+        return toXML( element, true );
+    }
+
+    /**
+     * Render the given element to an XML string, with control over whether xml declaration is added.
+     */
+    protected String toXML( final Element element, boolean printXmlDeclaration )
+    {
+        return xml.toXML( element, printXmlDeclaration );
     }
 
 }

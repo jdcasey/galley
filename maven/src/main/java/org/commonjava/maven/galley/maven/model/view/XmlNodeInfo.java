@@ -73,4 +73,9 @@ public class XmlNodeInfo
     {
         return new OriginInfo( inherited ).setMixin( mixin );
     }
+
+    public String getText()
+    {
+        return node.getTextContent();
+    }
 }

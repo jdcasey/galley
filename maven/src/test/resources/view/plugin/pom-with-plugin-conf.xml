@@ -1,0 +1,21 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.foo</groupId>
+  <artifactId>bar</artifactId>
+  <version>1</version>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.foo</groupId>
+        <artifactId>plugin</artifactId>
+        <version>1</version>
+        <configuration>
+          <extensions>
+            <extension>ext.group:ext-artifact:1.0</extension>
+          </extensions>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

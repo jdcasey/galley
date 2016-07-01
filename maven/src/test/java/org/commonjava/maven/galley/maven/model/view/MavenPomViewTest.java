@@ -337,9 +337,8 @@ public class MavenPomViewTest
     {
         MavenPomView pomView = loadPoms( "pom-with-property.xml", "simple-parent-pom.xml" );
 
-        List<PropertiesView> lpv = pomView.getProperties();
-
-        Properties result = PropertiesView.aggregateProperties( lpv );
+        PropertiesView propertiesView = pomView.getProperties();
+        Properties result = propertiesView.getProperties();
 
         assertThat( result.size(), equalTo( 7 ) );
         assertThat( result.getProperty( "another-property" ), equalTo( "2.1" ) );
@@ -364,5 +363,11 @@ public class MavenPomViewTest
 
             assertTrue( !pv.getVersion().contains( "${" ) );
         }
+    }
+
+    @Test
+    public void pluginExecutionsIncludedFromParent() throws Exception
+    {
+
     }
 }

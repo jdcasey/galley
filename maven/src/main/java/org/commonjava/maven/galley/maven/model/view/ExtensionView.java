@@ -15,15 +15,16 @@
  */
 package org.commonjava.maven.galley.maven.model.view;
 
+import org.commonjava.maven.atlas.ident.ref.ProjectRef;
+import org.commonjava.maven.atlas.ident.ref.ProjectVersionRef;
+import org.commonjava.maven.galley.maven.GalleyMavenException;
 import org.w3c.dom.Element;
 
 public class ExtensionView
     extends MavenGAVView
 {
-
     public ExtensionView( final MavenPomView pomView, final Element element, final OriginInfo originInfo )
     {
         super( pomView, element, originInfo );
     }
-
 }

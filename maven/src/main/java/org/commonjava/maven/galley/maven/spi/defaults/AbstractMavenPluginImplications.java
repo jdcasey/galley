@@ -54,7 +54,7 @@ public abstract class AbstractMavenPluginImplications
         final Element element = pv.getElement();
         return new PluginDependencyView( pv.getPomView(), pv,
                                          xml.createElement( element, "dependencies/dependency", map ),
-                                         new OriginInfo() );
+                                         new OriginInfo(), pv.getManagedPluginXpathFragment() );
     }
 
     @Override

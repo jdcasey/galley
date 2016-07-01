@@ -21,13 +21,11 @@ import org.commonjava.maven.galley.maven.GalleyMavenException;
 public interface ProjectRefView
 {
 
-    String getGroupId()
-        throws GalleyMavenException;
+    String getGroupId();
 
-    String getArtifactId()
-        throws GalleyMavenException;
+    String getArtifactId();
 
     ProjectRef asProjectRef()
-        throws GalleyMavenException;
+            throws GalleyMavenException;
 
 }

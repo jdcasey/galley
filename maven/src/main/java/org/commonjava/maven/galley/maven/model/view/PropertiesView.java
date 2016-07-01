@@ -15,71 +15,104 @@
  */
 package org.commonjava.maven.galley.maven.model.view;
 
+import org.apache.commons.lang.StringUtils;
+import org.commonjava.maven.galley.maven.GalleyMavenException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Properties;
 
 public class PropertiesView
-    extends MavenGAVView
+    extends MavenPomElementView
 {
+    private Properties localProperties;
+
+    private Properties properties;
+
     public PropertiesView( final MavenPomView pomView, final Element element, OriginInfo originInfo )
     {
-        super( pomView, element, originInfo );
+        super( pomView, element, originInfo, "properties" );
     }
 
     /**
-     * Return any key/value properties from within this view.
+     * Return any key/value properties from within this view. Does NOT include inherited properties. If the local
+     * properties section is missing, return empty Properties.
+     *
      * @return Properties - containing key/values from this view.
      */
-    public Properties getProperties()
+    public synchronized Properties getLocalProperties()
+            throws GalleyMavenException
     {
-        List<Element> elements = getElements( "*" );
-        Properties result = new Properties();
-
-        for ( Element e : elements )
+        if ( localProperties == null )
         {
-            Node value = e.getFirstChild();
-            result.setProperty( e.getNodeName(), (value == null ? "" :
-                            getPomView().resolveExpressions( e.getFirstChild().getNodeValue() ) ) );
+            localProperties = new Properties();
+            extractPropertiesInto( getElement(), localProperties );
         }
-        return result;
+
+        return localProperties;
     }
 
-    /**
-     * Utility function to aggregate a list of PropertiesViews (i.e. inherited poms) and to create
-     * a merged Properties.
-     *
-     * @param lpv
-     * @return
-     */
-    public static Properties aggregateProperties (List<PropertiesView> lpv)
+    public synchronized Properties getProperties()
+            throws GalleyMavenException
     {
-        Properties result = new Properties();
-        ListIterator<PropertiesView> iterator = lpv.listIterator(lpv.size());
-
-        // Iterate in reverse order so children can override parent.
-        while ( iterator.hasPrevious() )
+        Logger logger = LoggerFactory.getLogger( getClass() );
+        if ( properties == null )
         {
-            Properties p = iterator.previous().getProperties();
-
-            for ( String key : p.stringPropertyNames())
+            properties = new Properties();
+            logger.debug( "Grabbing local properties..." );
+            Properties localProperties = getLocalProperties();
+            for ( String key : localProperties.stringPropertyNames() )
             {
-                if ( ! result.containsKey( key ) )
-                {
-                    result.setProperty( key, p.getProperty( key ) );
-                }
-                else if ( p.getProperty( key ).length() > 0 && ! p.getProperty( key ).startsWith( "${" ))
-                {
-                    // The result already contains this key. We only prefer new key/value
-                    // if its 'better' i.e. not a property.
-                    result.setProperty( key, p.getProperty( key ) );
-                }
+                logger.debug( "Adding local: {}", key );
+                properties.setProperty( key, localProperties.getProperty( key ) );
+            }
+
+            logger.debug( "Looking for aggregation source elements (inheritance)..." );
+            List<MavenPomElementView> aggregationElements = getAggregationSourceElements( "/project/properties", true, false );
+            for ( MavenPomElementView view : aggregationElements )
+            {
+                extractPropertiesInto( view.getElement(), properties );
             }
         }
 
-        return result;
+        return properties;
+    }
+
+    private void extractPropertiesInto( Element element, Properties properties )
+            throws GalleyMavenException
+    {
+        Logger logger = LoggerFactory.getLogger( getClass() );
+        logger.debug( "Extracting properties from element: {}", element );
+        if ( element != null )
+        {
+            NodeList children = element.getChildNodes();
+            if ( children != null )
+            {
+                logger.debug( "Traversing {} child nodes.", children.getLength() );
+                for ( int i = 0; i < children.getLength(); i++ )
+                {
+                    Node node = children.item( i );
+                    if ( node instanceof Element )
+                    {
+                        String key = node.getNodeName();
+                        logger.debug( "found property: {}", key );
+                        if ( !properties.containsKey( key ) || StringUtils.isEmpty( properties.getProperty( key ) ) )
+                        {
+                            String value = getPomView().resolveExpressions( node.getTextContent().trim() );
+                            logger.debug( "+= '{}': '{}'", key, value );
+                            properties.setProperty( key, value );
+                        }
+                        else
+                        {
+                            logger.debug( "Skipping already-present key: '{}'", key );
+                        }
+                    }
+                }
+            }
+        }
     }
 }

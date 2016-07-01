@@ -23,135 +23,73 @@ import org.commonjava.maven.atlas.ident.ref.SimpleProjectRef;
 import org.commonjava.maven.galley.maven.GalleyMavenException;
 import org.w3c.dom.Element;
 
+/**
+ * Generic view that represents some reference to a Maven project without regard to any given version of it.
+ */
 public class MavenGAView
     extends MavenPomElementView
     implements ProjectRefView
 {
 
-    private String groupId;
-
-    private String artifactId;
+    protected final MavenGAVHelper helper;
 
     public MavenGAView( final MavenPomView pomView, final Element element, final OriginInfo originInfo, final String managementXpathFragment )
     {
         super( pomView, element, originInfo, managementXpathFragment );
+        this.helper = new MavenGAVHelper( this );
     }
 
     public MavenGAView( final MavenPomView pomView, final Element element, final OriginInfo originInfo )
     {
         super( pomView, element, originInfo, null );
+        this.helper = new MavenGAVHelper( this );
     }
 
     @Override
-    public synchronized String getGroupId()
+    public String getGroupId()
     {
-        if ( groupId == null )
-        {
-            groupId = getValue( G );
-        }
-
-        return groupId;
+        return helper.getGroupId();
     }
 
-    protected void setGroupId( final String groupId )
+    protected void setGroupId( String groupId )
     {
-        this.groupId = groupId;
+        helper.setGroupId( groupId );
     }
 
     @Override
-    public synchronized String getArtifactId()
+    public String getArtifactId()
     {
-        if ( artifactId == null )
-        {
-            artifactId = getValue( A );
-        }
-
-        return artifactId;
+        return helper.getArtifactId();
     }
 
     @Override
     public ProjectRef asProjectRef()
-        throws GalleyMavenException
+            throws GalleyMavenException
     {
-        try
-        {
-            return new SimpleProjectRef( getGroupId(), getArtifactId() );
-        }
-        catch ( final IllegalArgumentException e )
-        {
-            throw new GalleyMavenException( "Cannot render ProjectRef: {}:{}. Reason: {}", e, getGroupId(), getArtifactId(), e.getMessage() );
-        }
+        return helper.asProjectRef();
     }
 
     @Override
     public String toString()
     {
-        return String.format( "%s [%s:%s]", getClass().getSimpleName(), getGroupId(), getArtifactId() );
+        return helper.gaToString();
     }
 
     public boolean isValid()
     {
-        return !containsExpression( getGroupId() ) && !containsExpression( getArtifactId() );
+        return helper.gaIsValid();
     }
 
     @Override
     public int hashCode()
     {
-        final int prime = 31;
-        int result = 1;
-        final String artifactId = getArtifactId();
-        final String groupId = getGroupId();
-
-        result = prime * result + ( ( artifactId == null ) ? 0 : artifactId.hashCode() );
-        result = prime * result + ( ( groupId == null ) ? 0 : groupId.hashCode() );
-        return result;
+        return helper.gaHashCode();
     }
 
     @Override
     public boolean equals( final Object obj )
     {
-        if ( this == obj )
-        {
-            return true;
-        }
-        if ( obj == null )
-        {
-            return false;
-        }
-        if ( getClass() != obj.getClass() )
-        {
-            return false;
-        }
-        final String artifactId = getArtifactId();
-        final String groupId = getGroupId();
-
-        final MavenGAView other = (MavenGAView) obj;
-        final String oArtifactId = other.getArtifactId();
-        final String oGroupId = other.getGroupId();
-
-        if ( artifactId == null )
-        {
-            if ( oArtifactId != null )
-            {
-                return false;
-            }
-        }
-        else if ( !artifactId.equals( oArtifactId ) )
-        {
-            return false;
-        }
-        if ( groupId == null )
-        {
-            if ( oGroupId != null )
-            {
-                return false;
-            }
-        }
-        else if ( !groupId.equals( oGroupId ) )
-        {
-            return false;
-        }
-        return true;
+        return helper.gaEquals( obj );
     }
 
 }

@@ -56,7 +56,7 @@ public class MavenMetadataView
     public List<String> resolveValues( final String path )
         throws GalleyMavenException
     {
-        return resolveXPathToAggregatedStringList( path, true, -1 );
+        return resolveXPathToAggregatedStringList( path, true, -1, false );
     }
 
 }

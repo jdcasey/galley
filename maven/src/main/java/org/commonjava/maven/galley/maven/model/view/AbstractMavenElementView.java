@@ -139,4 +139,9 @@ public abstract class AbstractMavenElementView<T extends MavenXmlView<?>>
         return xmlView.toXML( element );
     }
 
+    protected final String toXML( final boolean printXmlDeclaration )
+    {
+        return xmlView.toXML( element, printXmlDeclaration );
+    }
+
 }

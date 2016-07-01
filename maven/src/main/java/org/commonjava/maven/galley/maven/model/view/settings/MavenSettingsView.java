@@ -45,7 +45,7 @@ public class MavenSettingsView
 
     public List<MirrorView> getMirrors()
     {
-        final List<Node> nodes = resolveXPathToAggregatedNodeList( "/settings/mirrors", true, -1 );
+        final List<Node> nodes = resolveXPathToAggregatedNodeList( "/settings/mirrors", true, -1, false );
         final List<MirrorView> result = new ArrayList<MirrorView>();
         for ( final Node node : nodes )
         {
@@ -75,7 +75,7 @@ public class MavenSettingsView
     public List<String> resolveValues( final String path )
         throws GalleyMavenException
     {
-        return resolveXPathToAggregatedStringList( path, true, -1 );
+        return resolveXPathToAggregatedStringList( path, true, -1, false );
     }
 
 }
