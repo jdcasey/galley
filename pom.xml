@@ -53,9 +53,10 @@
     <!-- 1.6 is necessary for certain subsets, so it can be used by eg. PME -->
     <!-- 1.7 is the minimum JVM we can use to build, because of deps in other parts. -->
     <javaVersion>1.8</javaVersion>
-    <byteman.version>3.0.6</byteman.version>
+    <!-- <byteman.version>3.0.6</byteman.version> -->
+    <byteman.version>3.0.7-SNAPSHOT</byteman.version>
 
-    <test-forkCount>1</test-forkCount>
+    <test-forkCount>8</test-forkCount>
     <test-redirectOutput>true</test-redirectOutput>
   </properties>
 

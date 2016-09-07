@@ -43,7 +43,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 
 @RunWith( org.jboss.byteman.contrib.bmunit.BMUnitRunner.class )
-@BMUnitConfig( loadDirectory = "target/test-classes/bmunit", debug = true )
+@BMUnitConfig( loadDirectory = "target/test-classes/bmunit", debug = true, agentPort = "-1" )
 public class FastLocalCacheProviderConcurrentTest
 {
     @Rule
