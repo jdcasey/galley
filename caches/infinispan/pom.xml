@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.commonjava.maven.galley</groupId>
     <artifactId>galley-caches</artifactId>
-    <version>0.15.2</version>
+    <version>0.15.3-SNAPSHOT</version>
   </parent>
   
   <artifactId>galley-cache-infinispan</artifactId>

@@ -27,7 +27,7 @@
 
   <groupId>org.commonjava.maven.galley</groupId>
   <artifactId>galley</artifactId>
-  <version>0.15.2</version>
+  <version>0.15.3-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>Galley :: Parent</name>
@@ -40,7 +40,7 @@
     <connection>scm:git:https://github.com/Commonjava/galley.git</connection>
     <developerConnection>scm:git:git@github.com:Commonjava/galley.git</developerConnection>
     <url>http://github.com/Commonjava/galley</url>
-    <tag>galley-0.15.2</tag>
+    <tag>galley-0.15.0</tag>
   </scm>
 
   <properties>
@@ -70,32 +70,32 @@
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-api</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-maven</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-core</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-transport-filearc</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-transport-httpclient</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-cache-partyline</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
@@ -105,21 +105,21 @@
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-cache-tck</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
         <scope>test</scope>
       </dependency>
 
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-test-harness-api</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
         <scope>test</scope>
       </dependency>
 
       <dependency>
         <groupId>org.commonjava.maven.galley</groupId>
         <artifactId>galley-test-harness-core</artifactId>
-        <version>0.15.2</version>
+        <version>0.15.3-SNAPSHOT</version>
         <scope>test</scope>
       </dependency>
 
