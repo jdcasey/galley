@@ -139,7 +139,7 @@ public class HttpClientTransport
         try
         {
             //noinspection ConstantConditions
-            return uri != null && uri.startsWith( "http" ) && new URL( location.getUri() ) != null; // hack, but just verify that the URL parses.
+            return uri != null && uri.startsWith( "http" ) && new URL( uri ) != null; // hack, but just verify that the URL parses.
         }
         catch ( final MalformedURLException e )
         {
@@ -179,7 +179,7 @@ public class HttpClientTransport
         return new HttpExistence( getUrl( resource ), getHttpLocation( resource.getLocation() ), target, http, mapper );
     }
 
-    private String getUrl( final ConcreteResource resource )
+    protected String getUrl( final ConcreteResource resource )
         throws TransferException
     {
         try
